@@ -15,6 +15,7 @@ const STATIC = {
   '/': ['index.html', 'text/html; charset=utf-8'],
   '/admin': ['admin.html', 'text/html; charset=utf-8'],
   '/style.css': ['style.css', 'text/css; charset=utf-8'],
+  '/live.js': ['live.js', 'text/javascript; charset=utf-8'],
 };
 
 const state = {
@@ -82,18 +83,15 @@ function checkWinners(number) {
 }
 
 // ---------- Estado público / broadcast ----------
+// Estado enxuto enviado a todos os celulares a cada sorteio (sem a lista de jogadores)
 function publicState() {
-  const drawnSet = new Set(state.drawn);
-  const players = [...state.cards.values()]
-    .map(c => ({ name: c.name, ...cardStats(c, drawnSet) }))
-    .sort((a, b) => a.bestLineMissing - b.bestLineMissing || b.hits - a.hits);
   return {
     round: state.round,
     drawn: state.drawn,
     last: state.drawn[state.drawn.length - 1] ?? null,
     remaining: MAX_NUMBER - state.drawn.length,
-    winners: state.winners,
-    players: players.map(({ full, ...p }) => p),
+    winners: state.winners.map(({ ref, name, type, number }) => ({ ref, name, type, number })),
+    playerCount: state.cards.size,
   };
 }
 
@@ -142,8 +140,15 @@ function createCard(name) {
   return card;
 }
 
+// Lista detalhada (só para o admin): link + progresso de cada cartela, mais perto de ganhar primeiro
 function cardLinks() {
-  return [...state.cards.values()].map(c => ({ id: c.id, name: c.name }));
+  const drawnSet = new Set(state.drawn);
+  return [...state.cards.values()]
+    .map(c => {
+      const { hits, bestLineMissing } = cardStats(c, drawnSet);
+      return { id: c.id, name: c.name, hits, bestLineMissing };
+    })
+    .sort((a, b) => a.bestLineMissing - b.bestLineMissing || b.hits - a.hits || a.name.localeCompare(b.name));
 }
 
 // ---------- Rotas ----------
@@ -172,7 +177,8 @@ async function handle(req, res) {
     });
     res.write(`data: ${JSON.stringify(publicState())}\n\n`);
     clients.add(res);
-    const ping = setInterval(() => res.write(': ping\n\n'), 25_000);
+    // ping visível ao navegador: o celular usa para perceber conexão morta e reconectar
+    const ping = setInterval(() => res.write('event: ping\ndata: 1\n\n'), 20_000);
     req.on('close', () => { clearInterval(ping); clients.delete(res); });
     return;
   }

@@ -2,14 +2,14 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#161412">
   <title>Bingo</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-<main>
+<main class="player">
   <h1 id="title">Bingo</h1>
-  <p class="sub">Sua cartela é marcada automaticamente a cada número sorteado. <span id="status" class="status">conectando</span></p>
 
   <section id="invalid" class="panel hidden">
     <h2>Link inválido</h2>
@@ -19,26 +19,31 @@
   <section id="join" class="panel hidden">
     <h2>Entrar no jogo</h2>
     <form id="joinForm">
-      <input id="name" type="text" maxlength="30" placeholder="Seu nome" autocomplete="nickname" required>
+      <input id="name" type="text" maxlength="40" placeholder="Seu nome" autocomplete="nickname" required>
       <button type="submit">Pegar cartela</button>
     </form>
     <div id="joinError" class="error"></div>
   </section>
 
   <section id="game" class="hidden">
+    <!-- Barra fixa no topo: último número sempre visível enquanto rola a tela -->
+    <div class="livebar">
+      <div id="ball" class="ball ball-sm">–</div>
+      <div class="livebar-info">
+        <strong>Último número</strong>
+        <span id="drawCount" class="muted"></span>
+        <span id="status" class="status">conectando</span>
+      </div>
+    </div>
+
     <div id="banner" class="banner hidden"></div>
-    <div class="row">
+
+    <div class="layout">
       <div class="panel">
-        <h2>Sua cartela</h2>
         <div id="card" class="card"></div>
-        <p id="cardInfo" class="center muted"></p>
+        <p id="cardInfo" class="center muted" style="margin:12px 0 0"></p>
       </div>
       <div>
-        <div class="panel center">
-          <h2>Último número</h2>
-          <div id="ball" class="ball">–</div>
-          <p id="drawCount" class="muted"></p>
-        </div>
         <div class="panel">
           <h2>Já sorteados</h2>
           <div id="history" class="history"></div>
@@ -52,41 +57,49 @@
   </section>
 </main>
 
+<script src="/live.js"></script>
 <script>
 const LETTERS = 'BINGO';
 const letterOf = n => LETTERS[Math.floor((n - 1) / 15)];
 const $ = id => document.getElementById(id);
 
-let card = null;
+let card = null;          // { id, ref, name, grid, round }
+let cellByNumber = {};    // número -> célula da cartela (para atualizar só o que mudou)
+let shown = [];           // números já mostrados no histórico
 let lastState = null;
-let prevDrawn = new Set();
-
-function storedId() { try { return localStorage.getItem('bingoCardId'); } catch { return null; } }
-function storeId(id) { try { id ? localStorage.setItem('bingoCardId', id) : localStorage.removeItem('bingoCardId'); } catch {} }
+let winnersKey = null;
 
 // Cartela aberta por link (/cartela/<id>) tem prioridade sobre a salva no navegador
 const linkMatch = location.pathname.match(/^\/cartela\/([0-9a-f-]{36})$/);
 const linkId = linkMatch ? linkMatch[1] : null;
 
+function storedId() { try { return localStorage.getItem('bingoCardId'); } catch { return null; } }
+function storeId(id) { try { id ? localStorage.setItem('bingoCardId', id) : localStorage.removeItem('bingoCardId'); } catch {} }
+
 async function loadCard(id) {
-  const r = await fetch('/api/card/' + id);
+  let r;
+  try { r = await fetch('/api/card/' + id); } catch { setTimeout(() => loadCard(id), 3000); return; }
   if (!r.ok) {
-    if (linkId) { card = null; $('invalid').classList.remove('hidden'); $('game').classList.add('hidden'); return; }
+    card = null;
+    if (linkId) { $('invalid').classList.remove('hidden'); $('game').classList.add('hidden'); return; }
     storeId(null); showJoin(); return;
   }
   card = await r.json();
   showGame();
 }
 
-function showJoin() { card = null; $('join').classList.remove('hidden'); $('game').classList.add('hidden'); }
+function showJoin() { $('join').classList.remove('hidden'); $('game').classList.add('hidden'); }
+
 function showGame() {
-  $('join').classList.add('hidden'); $('game').classList.remove('hidden');
+  $('join').classList.add('hidden');
+  $('invalid').classList.add('hidden');
+  $('game').classList.remove('hidden');
   $('title').textContent = card.name;
   $('title').className = 'player-name';
   document.title = card.name + ' · Bingo';
-  prevDrawn = new Set(lastState ? lastState.drawn : []);
-  renderCard(new Set());
-  if (lastState) render(lastState);
+  buildCard();
+  keepScreenOn();
+  if (lastState) render(lastState, false);
 }
 
 $('joinForm').addEventListener('submit', async e => {
@@ -101,31 +114,74 @@ $('joinForm').addEventListener('submit', async e => {
   card = data; storeId(card.id); showGame();
 });
 
-function renderCard(justDrawn) {
-  const drawn = new Set(lastState ? lastState.drawn : []);
+// Monta a cartela uma única vez; depois só troca classes das células
+function buildCard() {
   const el = $('card');
-  el.innerHTML = '';
+  const frag = document.createDocumentFragment();
+  cellByNumber = {};
   for (const l of LETTERS) {
-    const h = document.createElement('div'); h.className = 'head'; h.textContent = l; el.appendChild(h);
+    const h = document.createElement('div'); h.className = 'head'; h.textContent = l; frag.appendChild(h);
   }
-  let hits = 0;
   for (const row of card.grid) for (const n of row) {
     const c = document.createElement('div');
     c.className = 'cell';
-    if (n === 0) { c.classList.add('marked', 'free'); c.textContent = 'Livre'; }
-    else {
-      c.textContent = n;
-      if (drawn.has(n)) { c.classList.add('marked'); hits++; }
-      if (justDrawn.has(n)) c.classList.add('just');
-    }
-    el.appendChild(c);
+    if (n === 0) { c.classList.add('marked', 'free'); c.textContent = '★'; }
+    else { c.textContent = n; cellByNumber[n] = c; }
+    frag.appendChild(c);
   }
-  $('cardInfo').textContent = hits + ' de 24 números marcados';
+  el.replaceChildren(frag);
 }
 
-function render(s) {
-  const newly = new Set(s.drawn.filter(n => !prevDrawn.has(n)));
-  prevDrawn = new Set(s.drawn);
+function updateCard(drawnSet, newly) {
+  let hits = 0, gotNew = false;
+  for (const n in cellByNumber) {
+    const on = drawnSet.has(+n);
+    const c = cellByNumber[n];
+    if (on) hits++;
+    if (c.classList.contains('marked') !== on) {
+      c.classList.toggle('marked', on);
+      if (on && newly.has(+n)) { c.classList.add('just'); gotNew = true; }
+    }
+  }
+  $('cardInfo').textContent = hits + ' de 24 números marcados';
+  if (gotNew && navigator.vibrate) navigator.vibrate(120);
+}
+
+function chip(n) {
+  const ch = document.createElement('span'); ch.className = 'chip'; ch.textContent = letterOf(n) + ' ' + n; return ch;
+}
+
+function updateHistory(drawn) {
+  const hist = $('history');
+  // Reinício de rodada ou primeira carga: refaz; senão só adiciona os novos no começo
+  const continues = shown.length <= drawn.length && shown.every((n, i) => n === drawn[i]);
+  if (!continues || !hist.firstChild || hist.firstChild.classList?.contains('muted')) {
+    hist.replaceChildren(...[...drawn].reverse().map(chip));
+  } else {
+    for (const n of drawn.slice(shown.length)) hist.prepend(chip(n));
+  }
+  if (!drawn.length) hist.innerHTML = '<span class="muted">Aguardando o primeiro sorteio…</span>';
+  shown = drawn.slice();
+}
+
+function updateWinners(winners) {
+  const key = winners.map(w => w.ref + w.type).join('|');
+  if (key === winnersKey) return;
+  winnersKey = key;
+  const w = $('winners');
+  if (!winners.length) { w.innerHTML = '<li class="muted">Ninguém ainda.</li>'; return; }
+  w.replaceChildren(...winners.map(win => {
+    const li = document.createElement('li');
+    const a = document.createElement('strong'); a.textContent = win.name;
+    const b = document.createElement('span'); b.className = 'muted'; b.textContent = win.type + (win.number ? ' · no ' + win.number : '');
+    li.append(a, b); return li;
+  }));
+}
+
+function render(s, animate = true) {
+  const prev = new Set(lastState && lastState.round === s.round ? lastState.drawn : s.drawn);
+  const newly = animate ? new Set(s.drawn.filter(n => !prev.has(n))) : new Set();
+  lastState = s;
 
   const ball = $('ball');
   if (s.last) {
@@ -134,41 +190,25 @@ function render(s) {
   } else ball.textContent = '–';
   $('drawCount').textContent = s.drawn.length + ' sorteados · ' + s.remaining + ' restantes';
 
-  const hist = $('history'); hist.innerHTML = '';
-  if (!s.drawn.length) hist.innerHTML = '<span class="muted">Aguardando o primeiro sorteio…</span>';
-  [...s.drawn].reverse().forEach(n => {
-    const ch = document.createElement('span'); ch.className = 'chip'; ch.textContent = letterOf(n) + ' ' + n; hist.appendChild(ch);
-  });
+  updateHistory(s.drawn);
+  updateWinners(s.winners);
 
-  const w = $('winners'); w.innerHTML = '';
-  if (!s.winners.length) w.innerHTML = '<li class="muted">Ninguém ainda.</li>';
-  s.winners.forEach(win => {
-    const li = document.createElement('li');
-    const a = document.createElement('strong'); a.textContent = win.name;
-    const b = document.createElement('span'); b.className = 'muted'; b.textContent = win.type + (win.number ? ' · no ' + win.number : '');
-    li.append(a, b); w.appendChild(li);
-  });
+  if (!card) return;
+  if (card.round !== s.round) { loadCard(card.id); return; } // nova rodada: cartela nova
+  updateCard(new Set(s.drawn), newly);
 
-  if (card) {
-    if (card.round !== s.round) { loadCard(card.id); return; } // nova rodada: nova cartela
-    renderCard(newly);
-    const mine = s.winners.filter(x => x.ref === card.ref).map(x => x.type);
-    const banner = $('banner');
-    if (mine.length) { banner.textContent = '🎉 BINGO! Você fez ' + mine.join(' e ') + '!'; banner.classList.remove('hidden'); }
-    else banner.classList.add('hidden');
-  }
-}
-
-function connect() {
-  const es = new EventSource('/events');
-  es.onopen = () => { $('status').textContent = 'ao vivo'; $('status').classList.add('on'); };
-  es.onerror = () => { $('status').textContent = 'reconectando…'; $('status').classList.remove('on'); };
-  es.onmessage = e => { lastState = JSON.parse(e.data); render(lastState); };
+  const mine = s.winners.filter(x => x.ref === card.ref).map(x => x.type);
+  const banner = $('banner');
+  if (mine.length) {
+    const text = '🎉 BINGO! Você fez ' + mine.join(' e ') + '!';
+    if (banner.textContent !== text && navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 400]);
+    banner.textContent = text; banner.classList.remove('hidden');
+  } else banner.classList.add('hidden');
 }
 
 const id = linkId || storedId();
 if (id) loadCard(id); else showJoin();
-connect();
+connectLive(s => render(s), $('status'));
 </script>
 </body>
 </html>

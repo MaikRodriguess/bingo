@@ -2,94 +2,102 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#161412">
   <title>Bingo · Admin</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-<main>
-  <h1>Painel do sorteio</h1>
-  <p class="sub">Cada número sorteado aparece na hora para todos os jogadores. <span id="status" class="status">conectando</span></p>
+<main class="admin">
+  <div class="topline">
+    <h1>Painel do sorteio</h1>
+    <span id="status" class="status">conectando</span>
+  </div>
 
   <section id="login" class="panel">
     <h2>Acesso do administrador</h2>
     <form id="loginForm">
-      <input id="pw" type="password" placeholder="Senha (mostrada no terminal do servidor)" required>
+      <input id="pw" type="password" placeholder="Senha do administrador" autocomplete="current-password" required>
       <button type="submit">Entrar</button>
     </form>
     <div id="loginError" class="error"></div>
   </section>
 
   <section id="panel" class="hidden">
-    <div id="banner" class="banner hidden"></div>
-    <div class="row">
-      <div class="panel center">
-        <h2>Número sorteado</h2>
-        <div id="ball" class="ball">–</div>
+    <!-- Sorteio: no celular vira uma barra fixa no topo -->
+    <div class="drawbar">
+      <div id="ball" class="ball">–</div>
+      <div class="drawbar-main">
         <p id="drawCount" class="muted"></p>
-        <div class="row" style="gap:8px">
-          <button id="drawBtn">Sortear número</button>
-        </div>
-        <p style="margin:12px 0 0">
-          <label><input type="checkbox" id="auto"> Sortear automaticamente a cada
-            <select id="interval">
-              <option value="5">5 s</option><option value="10" selected>10 s</option>
-              <option value="20">20 s</option><option value="30">30 s</option>
-            </select></label>
-        </p>
+        <button id="drawBtn" class="big">Sortear número</button>
+        <label class="auto">
+          <input type="checkbox" id="auto"> Automático a cada
+          <select id="interval">
+            <option value="5">5 s</option><option value="10" selected>10 s</option>
+            <option value="20">20 s</option><option value="30">30 s</option>
+          </select>
+        </label>
         <div id="drawError" class="error"></div>
-      </div>
-      <div class="panel">
-        <h2>Jogadores (<span id="playerCount">0</span>)</h2>
-        <ul id="players" class="list"></ul>
       </div>
     </div>
 
-    <div class="panel">
-      <h2>Cartelas por link</h2>
-      <div class="row">
-        <div>
-          <label class="muted" for="names">Lista de nomes (um por linha)</label>
-          <textarea id="names" rows="7" placeholder="Maria&#10;João&#10;Ana"></textarea>
-          <label class="muted" for="baseUrl">Endereço que os jogadores vão abrir</label>
-          <input id="baseUrl" type="text">
-          <div class="row" style="gap:8px; margin-top:12px">
-            <button id="genBtn">Gerar cartelas e links</button>
-          </div>
-          <div id="genError" class="error"></div>
+    <div id="banner" class="banner hidden"></div>
+
+    <div class="layout">
+      <div>
+        <div class="panel">
+          <h2>Quadro de números</h2>
+          <div id="board" class="board"></div>
         </div>
-        <div>
-          <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px">
-            <span class="muted"><span id="linkCount">0</span> cartelas</span>
-            <button class="secondary" id="copyAll">Copiar todos os links</button>
+        <div class="panel">
+          <h2>Vencedores</h2>
+          <ul id="winners" class="list"></ul>
+        </div>
+      </div>
+
+      <div>
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Jogadores (<span id="playerCount">0</span>)</h2>
+            <button class="secondary small" id="copyAll">Copiar todos os links</button>
           </div>
           <ul id="links" class="list links"></ul>
         </div>
-      </div>
-    </div>
 
-    <div class="panel">
-      <h2>Quadro de números</h2>
-      <div id="board" class="board"></div>
-    </div>
+        <details class="panel" id="addBox">
+          <summary><h2>Adicionar cartelas</h2></summary>
+          <label class="muted" for="names">Lista de nomes (um por linha)</label>
+          <textarea id="names" rows="6" placeholder="Maria&#10;João&#10;Ana"></textarea>
+          <label class="muted" for="baseUrl">Endereço que os jogadores vão abrir</label>
+          <input id="baseUrl" type="url" inputmode="url">
+          <button id="genBtn" class="full" style="margin-top:12px">Gerar cartelas e links</button>
+          <div id="genError" class="error"></div>
+        </details>
 
-    <div class="row">
-      <div class="panel">
-        <h2>Vencedores</h2>
-        <ul id="winners" class="list"></ul>
-      </div>
-      <div class="panel">
-        <h2>Nova rodada</h2>
-        <p class="muted" style="margin-top:0">Zera os números sorteados e os vencedores.</p>
-        <div class="row" style="gap:8px">
-          <button class="secondary" id="resetKeep">Nova rodada (novas cartelas)</button>
-          <button class="secondary" id="resetAll">Encerrar e remover jogadores</button>
+        <div class="panel">
+          <h2>Rodada</h2>
+          <p class="muted" style="margin-top:0">Zera os números sorteados e os vencedores.</p>
+          <div class="stack">
+            <button class="secondary full" id="resetKeep">Nova rodada (novas cartelas)</button>
+            <button class="secondary full danger" id="resetAll">Encerrar e remover jogadores</button>
+          </div>
         </div>
       </div>
     </div>
   </section>
 </main>
 
+<div id="confirmBox" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="confirmMsg">
+  <div class="modal-card">
+    <p id="confirmMsg"></p>
+    <div class="modal-actions">
+      <button class="secondary" id="confirmNo">Cancelar</button>
+      <button id="confirmYes">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<script src="/live.js"></script>
 <script>
 const LETTERS = 'BINGO';
 const letterOf = n => LETTERS[Math.floor((n - 1) / 15)];
@@ -97,8 +105,29 @@ const $ = id => document.getElementById(id);
 let password = '';
 let autoTimer = null;
 let lastSeen = null;
+let cards = [];           // [{ id, name, hits, bestLineMissing }]
+let winnersKey = null;
 
 try { password = sessionStorage.getItem('bingoAdmin') || ''; } catch {}
+
+// Confirmação dentro da página (alguns navegadores embutidos bloqueiam o confirm() nativo)
+function askConfirm(message) {
+  return new Promise(resolve => {
+    const box = $('confirmBox');
+    $('confirmMsg').textContent = message;
+    box.classList.remove('hidden');
+    const done = ok => {
+      box.classList.add('hidden');
+      $('confirmYes').onclick = $('confirmNo').onclick = box.onclick = document.onkeydown = null;
+      resolve(ok);
+    };
+    $('confirmYes').onclick = () => done(true);
+    $('confirmNo').onclick = () => done(false);
+    box.onclick = e => { if (e.target === box) done(false); };
+    document.onkeydown = e => { if (e.key === 'Escape') done(false); };
+    $('confirmYes').focus();
+  });
+}
 
 function api(path, body) {
   return fetch('/api/admin/' + path, {
@@ -113,40 +142,50 @@ async function tryLogin() {
   if (!r.ok) { $('loginError').textContent = password ? 'Senha incorreta.' : ''; return; }
   try { sessionStorage.setItem('bingoAdmin', password); } catch {}
   $('login').classList.add('hidden'); $('panel').classList.remove('hidden');
-  refreshLinks();
+  keepScreenOn();
+  refreshPlayers();
 }
+$('loginForm').addEventListener('submit', e => { e.preventDefault(); password = $('pw').value; tryLogin(); });
+if (password) tryLogin();
 
-// ---------- Cartelas por link ----------
-let cards = [];
+// ---------- Jogadores + links ----------
 $('baseUrl').value = location.origin;
 const linkOf = c => $('baseUrl').value.replace(/\/+$/, '') + '/cartela/' + c.id;
 
-function renderLinks() {
-  $('linkCount').textContent = cards.length;
-  const ul = $('links'); ul.innerHTML = '';
-  if (!cards.length) ul.innerHTML = '<li class="muted">Nenhuma cartela ainda.</li>';
-  cards.forEach(c => {
+function renderPlayers() {
+  $('playerCount').textContent = cards.length;
+  const ul = $('links');
+  if (!cards.length) { ul.innerHTML = '<li class="muted">Nenhum jogador ainda. Use “Adicionar cartelas”.</li>'; $('addBox').open = true; return; }
+  ul.replaceChildren(...cards.map(c => {
     const li = document.createElement('li');
-    const info = document.createElement('div'); info.style.minWidth = '0';
+    const info = document.createElement('div'); info.className = 'pinfo';
     const name = document.createElement('strong'); name.textContent = c.name;
-    const a = document.createElement('a'); a.href = linkOf(c); a.target = '_blank'; a.textContent = linkOf(c); a.className = 'link';
-    info.append(name, document.createElement('br'), a);
-    const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.gap = '6px';
+    const stat = document.createElement('span'); stat.className = 'muted small-text';
+    stat.textContent = c.hits + ' acertos · ' + (c.bestLineMissing === 0 ? 'linha feita' : 'falta ' + c.bestLineMissing + ' p/ linha');
+    const a = document.createElement('a'); a.href = linkOf(c); a.target = '_blank'; a.rel = 'noopener'; a.textContent = linkOf(c); a.className = 'link';
+    info.append(name, stat, a);
+    const actions = document.createElement('div'); actions.className = 'pactions';
     const copy = document.createElement('button'); copy.className = 'secondary small'; copy.textContent = 'Copiar';
     copy.onclick = () => copyText(linkOf(c), copy);
     const del = document.createElement('button'); del.className = 'secondary small'; del.textContent = 'Remover';
     del.onclick = async () => {
-      if (!confirm('Remover a cartela de ' + c.name + '?')) return;
-      cards = (await (await api('cards/' + c.id + '/delete')).json()).cards; renderLinks();
+      if (!await askConfirm('Remover a cartela de ' + c.name + '?')) return;
+      const r = await api('cards/' + c.id + '/delete');
+      if (r.ok) { cards = (await r.json()).cards; renderPlayers(); }
     };
     actions.append(copy, del);
-    li.append(info, actions); ul.appendChild(li);
-  });
+    li.append(info, actions); return li;
+  }));
 }
 
-async function refreshLinks() {
-  const r = await api('cards/list');
-  if (r.ok) { cards = (await r.json()).cards; renderLinks(); }
+// Busca a lista só para o admin, agrupando várias atualizações seguidas numa única chamada
+let refreshTimer = null;
+function refreshPlayers() {
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(async () => {
+    const r = await api('cards/list');
+    if (r.ok) { cards = (await r.json()).cards; renderPlayers(); }
+  }, 300);
 }
 
 async function copyText(text, btn) {
@@ -162,20 +201,24 @@ $('genBtn').addEventListener('click', async () => {
   const r = await api('cards', { names });
   const data = await r.json();
   if (!r.ok) { $('genError').textContent = data.error; return; }
-  cards = data.cards; $('names').value = ''; renderLinks();
+  cards = data.cards; $('names').value = ''; renderPlayers();
 });
 $('copyAll').addEventListener('click', e => copyText(cards.map(c => c.name + ': ' + linkOf(c)).join('\n'), e.target));
-$('baseUrl').addEventListener('input', renderLinks);
+$('baseUrl').addEventListener('input', renderPlayers);
 
-$('loginForm').addEventListener('submit', e => { e.preventDefault(); password = $('pw').value; tryLogin(); });
-if (password) tryLogin();
-
+// ---------- Sorteio ----------
+let drawing = false;
 async function draw() {
+  if (drawing) return;
+  drawing = true;
   $('drawError').textContent = '';
   $('drawBtn').disabled = true;
-  const r = await api('draw');
+  try {
+    const r = await api('draw');
+    if (!r.ok) { $('drawError').textContent = (await r.json()).error; stopAuto(); }
+  } catch { $('drawError').textContent = 'Sem conexão. Tente de novo.'; }
+  drawing = false;
   $('drawBtn').disabled = false;
-  if (!r.ok) { $('drawError').textContent = (await r.json()).error; stopAuto(); }
 }
 $('drawBtn').addEventListener('click', draw);
 
@@ -185,30 +228,33 @@ $('auto').addEventListener('change', e => e.target.checked ? startAuto() : stopA
 $('interval').addEventListener('change', () => { if (autoTimer) startAuto(); });
 
 $('resetKeep').addEventListener('click', async () => {
-  if (!confirm('Começar uma nova rodada? Todos recebem cartelas novas.')) return;
+  if (!await askConfirm('Começar uma nova rodada? Todos recebem cartelas novas.')) return;
   stopAuto(); await api('reset', { keepPlayers: true });
 });
 $('resetAll').addEventListener('click', async () => {
-  if (!confirm('Encerrar o jogo e remover todos os jogadores?')) return;
+  if (!await askConfirm('Encerrar o jogo e remover todos os jogadores?')) return;
   stopAuto(); await api('reset', { keepPlayers: false });
 });
 
-// Quadro 1-75
-const board = $('board');
-for (let c = 0; c < 5; c++) {
-  const l = document.createElement('div'); l.className = 'letter'; l.textContent = LETTERS[c]; board.appendChild(l);
-  for (let i = 1; i <= 15; i++) {
-    const n = c * 15 + i;
-    const d = document.createElement('div'); d.className = 'n'; d.id = 'n' + n; d.textContent = n; board.appendChild(d);
+// Quadro 1-75 (montado uma vez)
+const boardCells = [];
+(() => {
+  const frag = document.createDocumentFragment();
+  for (let c = 0; c < 5; c++) {
+    const l = document.createElement('div'); l.className = 'letter'; l.textContent = LETTERS[c]; frag.appendChild(l);
+    for (let i = 1; i <= 15; i++) {
+      const n = c * 15 + i;
+      const d = document.createElement('div'); d.className = 'n'; d.textContent = n; boardCells[n] = d; frag.appendChild(d);
+    }
   }
-}
+  $('board').appendChild(frag);
+})();
 
 function render(s) {
   const drawn = new Set(s.drawn);
   for (let n = 1; n <= 75; n++) {
-    const d = $('n' + n);
-    d.classList.toggle('on', drawn.has(n));
-    d.classList.toggle('last', n === s.last);
+    boardCells[n].classList.toggle('on', drawn.has(n));
+    boardCells[n].classList.toggle('last', n === s.last);
   }
   const ball = $('ball');
   if (s.last) {
@@ -217,42 +263,33 @@ function render(s) {
   } else ball.textContent = '–';
   lastSeen = s.last;
   $('drawCount').textContent = s.drawn.length + ' sorteados · ' + s.remaining + ' restantes';
-  $('drawBtn').disabled = s.remaining === 0;
+  if (!drawing) $('drawBtn').disabled = s.remaining === 0;
 
-  $('playerCount').textContent = s.players.length;
-  if (password && s.players.length !== cards.length) refreshLinks();
-  const pl = $('players'); pl.innerHTML = '';
-  if (!s.players.length) pl.innerHTML = '<li class="muted">Nenhum jogador ainda. Compartilhe o endereço da página inicial.</li>';
-  s.players.forEach(p => {
-    const li = document.createElement('li');
-    const a = document.createElement('strong'); a.textContent = p.name;
-    const b = document.createElement('span'); b.className = 'muted';
-    b.textContent = p.hits + ' acertos · ' + (p.bestLineMissing === 0 ? 'linha feita' : 'falta ' + p.bestLineMissing + ' p/ linha');
-    li.append(a, b); pl.appendChild(li);
-  });
+  $('playerCount').textContent = s.playerCount;
+  if (password) refreshPlayers();
 
-  const w = $('winners'); w.innerHTML = '';
-  if (!s.winners.length) w.innerHTML = '<li class="muted">Ninguém ainda.</li>';
-  s.winners.forEach(win => {
-    const li = document.createElement('li');
-    const a = document.createElement('strong'); a.textContent = win.name;
-    const b = document.createElement('span'); b.className = 'muted'; b.textContent = win.type + (win.number ? ' · no ' + win.number : '');
-    li.append(a, b); w.appendChild(li);
-  });
-  const full = s.winners.filter(x => x.type === 'cartela cheia');
+  const key = s.winners.map(w => w.ref + w.type).join('|');
+  if (key !== winnersKey) {
+    winnersKey = key;
+    const w = $('winners');
+    if (!s.winners.length) w.innerHTML = '<li class="muted">Ninguém ainda.</li>';
+    else w.replaceChildren(...s.winners.map(win => {
+      const li = document.createElement('li');
+      const a = document.createElement('strong'); a.textContent = win.name;
+      const b = document.createElement('span'); b.className = 'muted'; b.textContent = win.type + (win.number ? ' · no ' + win.number : '');
+      li.append(a, b); return li;
+    }));
+  }
   const banner = $('banner');
   if (s.winners.length) {
     const lastWin = s.winners[s.winners.length - 1];
     banner.textContent = '🎉 ' + lastWin.name + ' fez ' + lastWin.type + '!';
     banner.classList.remove('hidden');
-    if (full.length) stopAuto();
+    if (s.winners.some(x => x.type === 'cartela cheia')) stopAuto();
   } else banner.classList.add('hidden');
 }
 
-const es = new EventSource('/events');
-es.onopen = () => { $('status').textContent = 'ao vivo'; $('status').classList.add('on'); };
-es.onerror = () => { $('status').textContent = 'reconectando…'; $('status').classList.remove('on'); };
-es.onmessage = e => render(JSON.parse(e.data));
+connectLive(render, $('status'));
 </script>
 </body>
 </html>
