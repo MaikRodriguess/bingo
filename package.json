@@ -1,0 +1,10 @@
+{
+  "name": "bingo-tempo-real",
+  "version": "1.0.0",
+  "description": "Bingo web com sorteio pelo administrador e cartelas marcadas em tempo real",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bingo · Admin</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+  <h1>Painel do sorteio</h1>
+  <p class="sub">Cada número sorteado aparece na hora para todos os jogadores. <span id="status" class="status">conectando</span></p>
+
+  <section id="login" class="panel">
+    <h2>Acesso do administrador</h2>
+    <form id="loginForm">
+      <input id="pw" type="password" placeholder="Senha (mostrada no terminal do servidor)" required>
+      <button type="submit">Entrar</button>
+    </form>
+    <div id="loginError" class="error"></div>
+  </section>
+
+  <section id="panel" class="hidden">
+    <div id="banner" class="banner hidden"></div>
+    <div class="row">
+      <div class="panel center">
+        <h2>Número sorteado</h2>
+        <div id="ball" class="ball">–</div>
+        <p id="drawCount" class="muted"></p>
+        <div class="row" style="gap:8px">
+          <button id="drawBtn">Sortear número</button>
+        </div>
+        <p style="margin:12px 0 0">
+          <label><input type="checkbox" id="auto"> Sortear automaticamente a cada
+            <select id="interval">
+              <option value="5">5 s</option><option value="10" selected>10 s</option>
+              <option value="20">20 s</option><option value="30">30 s</option>
+            </select></label>
+        </p>
+        <div id="drawError" class="error"></div>
+      </div>
+      <div class="panel">
+        <h2>Jogadores (<span id="playerCount">0</span>)</h2>
+        <ul id="players" class="list"></ul>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Cartelas por link</h2>
+      <div class="row">
+        <div>
+          <label class="muted" for="names">Lista de nomes (um por linha)</label>
+          <textarea id="names" rows="7" placeholder="Maria&#10;João&#10;Ana"></textarea>
+          <label class="muted" for="baseUrl">Endereço que os jogadores vão abrir</label>
+          <input id="baseUrl" type="text">
+          <div class="row" style="gap:8px; margin-top:12px">
+            <button id="genBtn">Gerar cartelas e links</button>
+          </div>
+          <div id="genError" class="error"></div>
+        </div>
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px">
+            <span class="muted"><span id="linkCount">0</span> cartelas</span>
+            <button class="secondary" id="copyAll">Copiar todos os links</button>
+          </div>
+          <ul id="links" class="list links"></ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Quadro de números</h2>
+      <div id="board" class="board"></div>
+    </div>
+
+    <div class="row">
+      <div class="panel">
+        <h2>Vencedores</h2>
+        <ul id="winners" class="list"></ul>
+      </div>
+      <div class="panel">
+        <h2>Nova rodada</h2>
+        <p class="muted" style="margin-top:0">Zera os números sorteados e os vencedores.</p>
+        <div class="row" style="gap:8px">
+          <button class="secondary" id="resetKeep">Nova rodada (novas cartelas)</button>
+          <button class="secondary" id="resetAll">Encerrar e remover jogadores</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+const LETTERS = 'BINGO';
+const letterOf = n => LETTERS[Math.floor((n - 1) / 15)];
+const $ = id => document.getElementById(id);
+let password = '';
+let autoTimer = null;
+let lastSeen = null;
+
+try { password = sessionStorage.getItem('bingoAdmin') || ''; } catch {}
+
+function api(path, body) {
+  return fetch('/api/admin/' + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Admin-Password': password },
+    body: JSON.stringify(body || {})
+  });
+}
+
+async function tryLogin() {
+  const r = await api('check');
+  if (!r.ok) { $('loginError').textContent = password ? 'Senha incorreta.' : ''; return; }
+  try { sessionStorage.setItem('bingoAdmin', password); } catch {}
+  $('login').classList.add('hidden'); $('panel').classList.remove('hidden');
+  refreshLinks();
+}
+
+// ---------- Cartelas por link ----------
+let cards = [];
+$('baseUrl').value = location.origin;
+const linkOf = c => $('baseUrl').value.replace(/\/+$/, '') + '/cartela/' + c.id;
+
+function renderLinks() {
+  $('linkCount').textContent = cards.length;
+  const ul = $('links'); ul.innerHTML = '';
+  if (!cards.length) ul.innerHTML = '<li class="muted">Nenhuma cartela ainda.</li>';
+  cards.forEach(c => {
+    const li = document.createElement('li');
+    const info = document.createElement('div'); info.style.minWidth = '0';
+    const name = document.createElement('strong'); name.textContent = c.name;
+    const a = document.createElement('a'); a.href = linkOf(c); a.target = '_blank'; a.textContent = linkOf(c); a.className = 'link';
+    info.append(name, document.createElement('br'), a);
+    const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.gap = '6px';
+    const copy = document.createElement('button'); copy.className = 'secondary small'; copy.textContent = 'Copiar';
+    copy.onclick = () => copyText(linkOf(c), copy);
+    const del = document.createElement('button'); del.className = 'secondary small'; del.textContent = 'Remover';
+    del.onclick = async () => {
+      if (!confirm('Remover a cartela de ' + c.name + '?')) return;
+      cards = (await (await api('cards/' + c.id + '/delete')).json()).cards; renderLinks();
+    };
+    actions.append(copy, del);
+    li.append(info, actions); ul.appendChild(li);
+  });
+}
+
+async function refreshLinks() {
+  const r = await api('cards/list');
+  if (r.ok) { cards = (await r.json()).cards; renderLinks(); }
+}
+
+async function copyText(text, btn) {
+  try { await navigator.clipboard.writeText(text); }
+  catch { const t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
+  const old = btn.textContent; btn.textContent = 'Copiado!'; setTimeout(() => btn.textContent = old, 1500);
+}
+
+$('genBtn').addEventListener('click', async () => {
+  $('genError').textContent = '';
+  const names = $('names').value.split('\n').map(s => s.trim()).filter(Boolean);
+  if (!names.length) { $('genError').textContent = 'Digite pelo menos um nome.'; return; }
+  const r = await api('cards', { names });
+  const data = await r.json();
+  if (!r.ok) { $('genError').textContent = data.error; return; }
+  cards = data.cards; $('names').value = ''; renderLinks();
+});
+$('copyAll').addEventListener('click', e => copyText(cards.map(c => c.name + ': ' + linkOf(c)).join('\n'), e.target));
+$('baseUrl').addEventListener('input', renderLinks);
+
+$('loginForm').addEventListener('submit', e => { e.preventDefault(); password = $('pw').value; tryLogin(); });
+if (password) tryLogin();
+
+async function draw() {
+  $('drawError').textContent = '';
+  $('drawBtn').disabled = true;
+  const r = await api('draw');
+  $('drawBtn').disabled = false;
+  if (!r.ok) { $('drawError').textContent = (await r.json()).error; stopAuto(); }
+}
+$('drawBtn').addEventListener('click', draw);
+
+function stopAuto() { clearInterval(autoTimer); autoTimer = null; $('auto').checked = false; }
+function startAuto() { clearInterval(autoTimer); autoTimer = setInterval(draw, $('interval').value * 1000); }
+$('auto').addEventListener('change', e => e.target.checked ? startAuto() : stopAuto());
+$('interval').addEventListener('change', () => { if (autoTimer) startAuto(); });
+
+$('resetKeep').addEventListener('click', async () => {
+  if (!confirm('Começar uma nova rodada? Todos recebem cartelas novas.')) return;
+  stopAuto(); await api('reset', { keepPlayers: true });
+});
+$('resetAll').addEventListener('click', async () => {
+  if (!confirm('Encerrar o jogo e remover todos os jogadores?')) return;
+  stopAuto(); await api('reset', { keepPlayers: false });
+});
+
+// Quadro 1-75
+const board = $('board');
+for (let c = 0; c < 5; c++) {
+  const l = document.createElement('div'); l.className = 'letter'; l.textContent = LETTERS[c]; board.appendChild(l);
+  for (let i = 1; i <= 15; i++) {
+    const n = c * 15 + i;
+    const d = document.createElement('div'); d.className = 'n'; d.id = 'n' + n; d.textContent = n; board.appendChild(d);
+  }
+}
+
+function render(s) {
+  const drawn = new Set(s.drawn);
+  for (let n = 1; n <= 75; n++) {
+    const d = $('n' + n);
+    d.classList.toggle('on', drawn.has(n));
+    d.classList.toggle('last', n === s.last);
+  }
+  const ball = $('ball');
+  if (s.last) {
+    ball.innerHTML = '<div><small>' + letterOf(s.last) + '</small>' + s.last + '</div>';
+    if (s.last !== lastSeen) { ball.classList.remove('pop'); void ball.offsetWidth; ball.classList.add('pop'); }
+  } else ball.textContent = '–';
+  lastSeen = s.last;
+  $('drawCount').textContent = s.drawn.length + ' sorteados · ' + s.remaining + ' restantes';
+  $('drawBtn').disabled = s.remaining === 0;
+
+  $('playerCount').textContent = s.players.length;
+  if (password && s.players.length !== cards.length) refreshLinks();
+  const pl = $('players'); pl.innerHTML = '';
+  if (!s.players.length) pl.innerHTML = '<li class="muted">Nenhum jogador ainda. Compartilhe o endereço da página inicial.</li>';
+  s.players.forEach(p => {
+    const li = document.createElement('li');
+    const a = document.createElement('strong'); a.textContent = p.name;
+    const b = document.createElement('span'); b.className = 'muted';
+    b.textContent = p.hits + ' acertos · ' + (p.bestLineMissing === 0 ? 'linha feita' : 'falta ' + p.bestLineMissing + ' p/ linha');
+    li.append(a, b); pl.appendChild(li);
+  });
+
+  const w = $('winners'); w.innerHTML = '';
+  if (!s.winners.length) w.innerHTML = '<li class="muted">Ninguém ainda.</li>';
+  s.winners.forEach(win => {
+    const li = document.createElement('li');
+    const a = document.createElement('strong'); a.textContent = win.name;
+    const b = document.createElement('span'); b.className = 'muted'; b.textContent = win.type + (win.number ? ' · no ' + win.number : '');
+    li.append(a, b); w.appendChild(li);
+  });
+  const full = s.winners.filter(x => x.type === 'cartela cheia');
+  const banner = $('banner');
+  if (s.winners.length) {
+    const lastWin = s.winners[s.winners.length - 1];
+    banner.textContent = '🎉 ' + lastWin.name + ' fez ' + lastWin.type + '!';
+    banner.classList.remove('hidden');
+    if (full.length) stopAuto();
+  } else banner.classList.add('hidden');
+}
+
+const es = new EventSource('/events');
+es.onopen = () => { $('status').textContent = 'ao vivo'; $('status').classList.add('on'); };
+es.onerror = () => { $('status').textContent = 'reconectando…'; $('status').classList.remove('on'); };
+es.onmessage = e => render(JSON.parse(e.data));
+</script>
+</body>
+</html>

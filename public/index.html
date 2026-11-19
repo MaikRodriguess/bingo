@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bingo</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+  <h1 id="title">Bingo</h1>
+  <p class="sub">Sua cartela é marcada automaticamente a cada número sorteado. <span id="status" class="status">conectando</span></p>
+
+  <section id="invalid" class="panel hidden">
+    <h2>Link inválido</h2>
+    <p style="margin:0">Esta cartela não existe ou foi removida. Peça um novo link ao organizador.</p>
+  </section>
+
+  <section id="join" class="panel hidden">
+    <h2>Entrar no jogo</h2>
+    <form id="joinForm">
+      <input id="name" type="text" maxlength="30" placeholder="Seu nome" autocomplete="nickname" required>
+      <button type="submit">Pegar cartela</button>
+    </form>
+    <div id="joinError" class="error"></div>
+  </section>
+
+  <section id="game" class="hidden">
+    <div id="banner" class="banner hidden"></div>
+    <div class="row">
+      <div class="panel">
+        <h2>Sua cartela</h2>
+        <div id="card" class="card"></div>
+        <p id="cardInfo" class="center muted"></p>
+      </div>
+      <div>
+        <div class="panel center">
+          <h2>Último número</h2>
+          <div id="ball" class="ball">–</div>
+          <p id="drawCount" class="muted"></p>
+        </div>
+        <div class="panel">
+          <h2>Já sorteados</h2>
+          <div id="history" class="history"></div>
+        </div>
+        <div class="panel">
+          <h2>Vencedores</h2>
+          <ul id="winners" class="list"><li class="muted">Ninguém ainda.</li></ul>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+const LETTERS = 'BINGO';
+const letterOf = n => LETTERS[Math.floor((n - 1) / 15)];
+const $ = id => document.getElementById(id);
+
+let card = null;
+let lastState = null;
+let prevDrawn = new Set();
+
+function storedId() { try { return localStorage.getItem('bingoCardId'); } catch { return null; } }
+function storeId(id) { try { id ? localStorage.setItem('bingoCardId', id) : localStorage.removeItem('bingoCardId'); } catch {} }
+
+// Cartela aberta por link (/cartela/<id>) tem prioridade sobre a salva no navegador
+const linkMatch = location.pathname.match(/^\/cartela\/([0-9a-f-]{36})$/);
+const linkId = linkMatch ? linkMatch[1] : null;
+
+async function loadCard(id) {
+  const r = await fetch('/api/card/' + id);
+  if (!r.ok) {
+    if (linkId) { card = null; $('invalid').classList.remove('hidden'); $('game').classList.add('hidden'); return; }
+    storeId(null); showJoin(); return;
+  }
+  card = await r.json();
+  showGame();
+}
+
+function showJoin() { card = null; $('join').classList.remove('hidden'); $('game').classList.add('hidden'); }
+function showGame() {
+  $('join').classList.add('hidden'); $('game').classList.remove('hidden');
+  $('title').textContent = card.name;
+  $('title').className = 'player-name';
+  document.title = card.name + ' · Bingo';
+  prevDrawn = new Set(lastState ? lastState.drawn : []);
+  renderCard(new Set());
+  if (lastState) render(lastState);
+}
+
+$('joinForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  $('joinError').textContent = '';
+  const r = await fetch('/api/join', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: $('name').value })
+  });
+  const data = await r.json();
+  if (!r.ok) { $('joinError').textContent = data.error; return; }
+  card = data; storeId(card.id); showGame();
+});
+
+function renderCard(justDrawn) {
+  const drawn = new Set(lastState ? lastState.drawn : []);
+  const el = $('card');
+  el.innerHTML = '';
+  for (const l of LETTERS) {
+    const h = document.createElement('div'); h.className = 'head'; h.textContent = l; el.appendChild(h);
+  }
+  let hits = 0;
+  for (const row of card.grid) for (const n of row) {
+    const c = document.createElement('div');
+    c.className = 'cell';
+    if (n === 0) { c.classList.add('marked', 'free'); c.textContent = 'Livre'; }
+    else {
+      c.textContent = n;
+      if (drawn.has(n)) { c.classList.add('marked'); hits++; }
+      if (justDrawn.has(n)) c.classList.add('just');
+    }
+    el.appendChild(c);
+  }
+  $('cardInfo').textContent = hits + ' de 24 números marcados';
+}
+
+function render(s) {
+  const newly = new Set(s.drawn.filter(n => !prevDrawn.has(n)));
+  prevDrawn = new Set(s.drawn);
+
+  const ball = $('ball');
+  if (s.last) {
+    ball.innerHTML = '<div><small>' + letterOf(s.last) + '</small>' + s.last + '</div>';
+    if (newly.has(s.last)) { ball.classList.remove('pop'); void ball.offsetWidth; ball.classList.add('pop'); }
+  } else ball.textContent = '–';
+  $('drawCount').textContent = s.drawn.length + ' sorteados · ' + s.remaining + ' restantes';
+
+  const hist = $('history'); hist.innerHTML = '';
+  if (!s.drawn.length) hist.innerHTML = '<span class="muted">Aguardando o primeiro sorteio…</span>';
+  [...s.drawn].reverse().forEach(n => {
+    const ch = document.createElement('span'); ch.className = 'chip'; ch.textContent = letterOf(n) + ' ' + n; hist.appendChild(ch);
+  });
+
+  const w = $('winners'); w.innerHTML = '';
+  if (!s.winners.length) w.innerHTML = '<li class="muted">Ninguém ainda.</li>';
+  s.winners.forEach(win => {
+    const li = document.createElement('li');
+    const a = document.createElement('strong'); a.textContent = win.name;
+    const b = document.createElement('span'); b.className = 'muted'; b.textContent = win.type + (win.number ? ' · no ' + win.number : '');
+    li.append(a, b); w.appendChild(li);
+  });
+
+  if (card) {
+    if (card.round !== s.round) { loadCard(card.id); return; } // nova rodada: nova cartela
+    renderCard(newly);
+    const mine = s.winners.filter(x => x.ref === card.ref).map(x => x.type);
+    const banner = $('banner');
+    if (mine.length) { banner.textContent = '🎉 BINGO! Você fez ' + mine.join(' e ') + '!'; banner.classList.remove('hidden'); }
+    else banner.classList.add('hidden');
+  }
+}
+
+function connect() {
+  const es = new EventSource('/events');
+  es.onopen = () => { $('status').textContent = 'ao vivo'; $('status').classList.add('on'); };
+  es.onerror = () => { $('status').textContent = 'reconectando…'; $('status').classList.remove('on'); };
+  es.onmessage = e => { lastState = JSON.parse(e.data); render(lastState); };
+}
+
+const id = linkId || storedId();
+if (id) loadCard(id); else showJoin();
+connect();
+</script>
+</body>
+</html>
