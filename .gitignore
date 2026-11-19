@@ -1,0 +1,4 @@
+# Arquivos locais de ferramentas (não versionar)
+.omc/
+.claude/
+node_modules/
